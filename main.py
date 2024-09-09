@@ -30,7 +30,7 @@ async def switch_tor_identity():
         with Controller.from_port(port=9051) as controller:
             controller.authenticate()
             controller.signal(Signal.NEWNYM)
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
         logger.info("New Tor identity requested successfully")
     except Exception as e:
         logger.error(f"Error switching Tor identity: {e}")
