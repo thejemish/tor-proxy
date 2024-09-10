@@ -1,20 +1,2 @@
 listen-address 0.0.0.0:8118
 forward-socks5 / 127.0.0.1:9050 .
-max-client-connections 256
-accept-intercepted-requests 0
-allow-cgi-request-crunching 0
-split-large-forms 0
-toggle 1
-enable-remote-toggle 0
-enable-remote-http-toggle 0
-enable-edit-actions 0
-enforce-blocks 0
-buffer-limit 4096
-enable-proxy-authentication-forwarding 0
-forward-socks4 / 127.0.0.1:9050 .
-forward-socks4a / 127.0.0.1:9050 .
-forwarded-connect-retries 1
-keep-alive-timeout 5
-tolerate-pipelining 1
-default-server-timeout 60
-connection-sharing 0

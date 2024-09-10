@@ -22,17 +22,12 @@ COPY . .
 COPY torrc /etc/tor/torrc
 COPY privoxy_config /etc/privoxy/config
 
-# Set correct permissions for Tor and create log directory
-RUN chown -R debian-tor:debian-tor /var/lib/tor && \
-    mkdir -p /var/log/tor && \
-    chown -R debian-tor:debian-tor /var/log/tor
-
 # Copy the entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Expose the ports the app, Privoxy, and Tor control port run on
-EXPOSE 8000 8118 9050 9051
+# Expose the ports the app and Privoxy run on
+EXPOSE 8000 8118
 
 # Use the entrypoint script to start services
 ENTRYPOINT ["/entrypoint.sh"]
