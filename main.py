@@ -4,28 +4,42 @@ from fastapi import FastAPI, HTTPException
 from stem import Signal
 from stem.control import Controller
 import asyncio
+from httpx import AsyncClient, Limits
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # HTTP proxy settings (Privoxy)
 HTTP_PROXY = "http://127.0.0.1:8118"
 
+# Tor control port
+TOR_CONTROL_PORT = 9051
+
+# Global AsyncClient
+http_client = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global http_client
     logger.info("Ensuring Tor and Privoxy are running...")
+    limits = Limits(max_keepalive_connections=5, max_connections=10)
+    http_client = AsyncClient(limits=limits, timeout=30.0)
     yield
+    await http_client.aclose()
     logger.info("Application shutting down...")
 
 app = FastAPI(lifespan=lifespan)
 
 async def switch_tor_identity():
     try:
-        with Controller.from_port(port=9051) as controller:
-            controller.authenticate()
-            controller.signal(Signal.NEWNYM)
-            await asyncio.sleep(2)
-        logger.info("New Tor identity requested successfully")
+        async with AsyncClient() as temp_client:
+            async with temp_client.post(f"http://localhost:{TOR_CONTROL_PORT}") as response:
+                if response.status_code == 200:
+                    await asyncio.sleep(2)  # Wait for the new circuit to be established
+                    logger.info("New Tor identity requested successfully")
+                else:
+                    raise Exception("Failed to switch Tor identity")
     except Exception as e:
         logger.error(f"Error switching Tor identity: {e}")
         raise HTTPException(status_code=500, detail="Failed to switch Tor identity")
