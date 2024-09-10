@@ -47,11 +47,12 @@ async def rotate_tor_circuit():
                 controller.signal(Signal.NEWNYM)
                 await asyncio.sleep(random.uniform(2, 5))  # Random delay after switching
             logger.info("Tor circuit rotated successfully")
-            return
+            return True
         except Exception as e:
             logger.warning(f"Error on attempt {attempt + 1}: {e}")
             if attempt == max_attempts - 1:
-                raise HTTPException(status_code=500, detail="Failed to rotate Tor circuit after multiple attempts")
+                logger.error("Failed to rotate Tor circuit after multiple attempts")
+                return False
             await asyncio.sleep(1)  # Wait before retrying
 
 def get_headers():
@@ -76,7 +77,6 @@ async def proxy_info():
 @app.get("/check_ip")
 async def check_ip():
     async with connection_semaphore:
-        await rotate_tor_circuit()  # Rotate the Tor circuit before checking IP
         try:
             async with httpx.AsyncClient(proxies={"http://": HTTP_PROXY, "https://": HTTP_PROXY}, 
                                          headers=get_headers(),
@@ -87,13 +87,32 @@ async def check_ip():
             logger.error(f"Error checking IP: {e}")
             raise HTTPException(status_code=500, detail="Failed to check IP")
 
-@app.middleware("http")
-async def rotate_ip_middleware(request: Request, call_next):
+@app.get("/rotate_ip")
+async def rotate_ip():
     async with connection_semaphore:
-        if request.url.path != "/check_ip":  # Don't rotate for the check_ip endpoint
-            await rotate_tor_circuit()
-        await asyncio.sleep(random.uniform(0.5, 2))  # Random delay before processing each request
+        success = await rotate_tor_circuit()
+        if success:
+            # Check the new IP after rotation
+            try:
+                async with httpx.AsyncClient(proxies={"http://": HTTP_PROXY, "https://": HTTP_PROXY}, 
+                                             headers=get_headers(),
+                                             timeout=30) as client:
+                    response = await client.get("https://api.ipify.org?format=json")
+                    new_ip = response.json()["ip"]
+                    return {"message": "IP rotated successfully", "new_ip": new_ip}
+            except Exception as e:
+                logger.error(f"Error checking new IP after rotation: {e}")
+                return {"message": "IP rotated successfully, but failed to fetch new IP"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to rotate IP")
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    async with connection_semaphore:
+        start_time = asyncio.get_event_loop().time()
         response = await call_next(request)
+        process_time = asyncio.get_event_loop().time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
         return response
 
 # Note: We're not including the `if __name__ == "__main__":` block here
