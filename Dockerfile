@@ -22,8 +22,10 @@ COPY . .
 COPY torrc /etc/tor/torrc
 COPY privoxy_config /etc/privoxy/config
 
-# Set correct permissions for Tor
-RUN chown -R debian-tor:debian-tor /var/lib/tor
+# Set correct permissions for Tor and create log directory
+RUN chown -R debian-tor:debian-tor /var/lib/tor && \
+    mkdir -p /var/log/tor && \
+    chown -R debian-tor:debian-tor /var/log/tor
 
 # Copy the entrypoint script
 COPY entrypoint.sh /entrypoint.sh

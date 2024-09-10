@@ -7,6 +7,7 @@ from stem.control import Controller
 import random
 import httpx
 import socket
+from asyncio import Semaphore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,6 +15,10 @@ logger = logging.getLogger(__name__)
 # HTTP proxy settings (Privoxy)
 HTTP_PROXY = "http://127.0.0.1:8118"
 TOR_CONTROL_PORT = 9051
+
+# Connection pool settings
+MAX_CONNECTIONS = 50
+connection_semaphore = Semaphore(MAX_CONNECTIONS)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,25 +75,26 @@ async def proxy_info():
 
 @app.get("/check_ip")
 async def check_ip():
-    await rotate_tor_circuit()  # Rotate the Tor circuit before checking IP
-    try:
-        async with httpx.AsyncClient(proxies={"http://": HTTP_PROXY, "https://": HTTP_PROXY}, 
-                                     headers=get_headers(),
-                                     timeout=30) as client:
-            response = await client.get("https://api.ipify.org?format=json")
-            return response.json()
-    except Exception as e:
-        logger.error(f"Error checking IP: {e}")
-        raise HTTPException(status_code=500, detail="Failed to check IP")
+    async with connection_semaphore:
+        await rotate_tor_circuit()  # Rotate the Tor circuit before checking IP
+        try:
+            async with httpx.AsyncClient(proxies={"http://": HTTP_PROXY, "https://": HTTP_PROXY}, 
+                                         headers=get_headers(),
+                                         timeout=30) as client:
+                response = await client.get("https://api.ipify.org?format=json")
+                return response.json()
+        except Exception as e:
+            logger.error(f"Error checking IP: {e}")
+            raise HTTPException(status_code=500, detail="Failed to check IP")
 
 @app.middleware("http")
 async def rotate_ip_middleware(request: Request, call_next):
-    if request.url.path != "/check_ip":  # Don't rotate for the check_ip endpoint
-        await rotate_tor_circuit()
-    await asyncio.sleep(random.uniform(0.5, 2))  # Random delay before processing each request
-    response = await call_next(request)
-    return response
+    async with connection_semaphore:
+        if request.url.path != "/check_ip":  # Don't rotate for the check_ip endpoint
+            await rotate_tor_circuit()
+        await asyncio.sleep(random.uniform(0.5, 2))  # Random delay before processing each request
+        response = await call_next(request)
+        return response
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Note: We're not including the `if __name__ == "__main__":` block here
+# because we're running the app using uvicorn in the entrypoint script
