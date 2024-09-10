@@ -1,5 +1,4 @@
-fastapi
-uvicorn
-httpx
-stem
-fake-useragent
+fastapi==0.68.0
+uvicorn==0.15.0
+httpx==0.23.0
+stem==1.8.0

@@ -26,8 +26,8 @@ COPY privoxy_config /etc/privoxy/config
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Expose the ports the app and Privoxy run on
-EXPOSE 8000 8118
+# Expose the ports the app, Privoxy, and Tor control port run on
+EXPOSE 8000 8118 9051
 
 # Use the entrypoint script to start services
 ENTRYPOINT ["/entrypoint.sh"]
