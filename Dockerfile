@@ -1,33 +1,38 @@
-FROM python:3.9-slim
+# Base image: Use the lightweight Alpine Linux
+FROM python:3.9-alpine
 
-# Install Tor, Privoxy and other necessary system dependencies
-RUN apt-get update && apt-get install -y \
+# Install Tor, Privoxy, and necessary dependencies
+RUN apk update && apk add --no-cache \
     tor \
     privoxy \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    openssl-dev \
+    python3-dev \
+    py3-pip \
+    && rm -rf /var/cache/apk/*
 
-# Set working directory in the container
+# Install FastAPI and Uvicorn
+RUN pip install --no-cache-dir fastapi uvicorn requests
+
+# Configure Tor: Run SOCKS5 proxy on port 9050, and enable ControlPort for changing identity
+RUN echo "SOCKSPort 0.0.0.0:9050" >> /etc/tor/torrc && \
+    echo "ControlPort 9051" >> /etc/tor/torrc && \
+    echo "CookieAuthentication 0" >> /etc/tor/torrc && \
+    echo "Log notice file /var/log/tor/notices.log" >> /etc/tor/torrc
+
+# Configure Privoxy: Forward all HTTP requests to the Tor SOCKS5 proxy
+RUN echo "forward-socks5t / 127.0.0.1:9050 ." >> /etc/privoxy/config && \
+    echo "listen-address 0.0.0.0:8118" >> /etc/privoxy/config
+
+# Expose necessary ports for Privoxy (HTTP proxy), Tor (SOCKS5 proxy), and ControlPort
+EXPOSE 8118 9050 9051
+
+# Copy FastAPI app code
 WORKDIR /app
+COPY ./proxy_server.py /app
 
-# Copy the requirements file into the container
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application's code
-COPY . .
-
-# Copy configuration files
-COPY torrc /etc/tor/torrc
-COPY privoxy_config /etc/privoxy/config
-
-# Copy the entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Expose the ports the app, Privoxy, and Tor control port run on
-EXPOSE 8112 8118 9051
-
-# Use the entrypoint script to start services
-ENTRYPOINT ["/entrypoint.sh"]
+# Command to start both Tor and Privoxy, then run FastAPI app
+CMD tor & privoxy --no-daemon /etc/privoxy/config & uvicorn proxy_server:app --host 0.0.0.0 --port 8000
